@@ -9,6 +9,7 @@ import numpy as np
 import scipy.optimize
 import matplotlib.pyplot as plt
 import matplotlib.patches as Patches
+from itertools import compress
 from shapely.geometry import Polygon
 
 import tensorflow as tf
@@ -152,7 +153,7 @@ def check_and_validate_polys(polys, tags, xxx_todo_changeme):
         validated_tags.append(tag)
     return np.array(validated_polys), np.array(validated_tags)
 
-
+"""
 def crop_area(im, polys, tags, labels, crop_background=False, max_tries=50):
     '''
     make random crop from the input image
@@ -220,6 +221,72 @@ def crop_area(im, polys, tags, labels, crop_background=False, max_tries=50):
         return im, polys, tags, select_labels
 
     return im, polys, tags, labels
+"""
+
+def crop_area(im, polys, tags, crop_background = False, max_tries = 50):
+    '''
+    Copy from github repro FOTS.Pytorch
+    make random crop from the input image
+    :param im:
+    :param polys:
+    :param tags:
+    :param crop_background:
+    :param max_tries:
+    :return:
+    '''
+    h, w, _ = im.shape
+    pad_h = h // 10
+    pad_w = w // 10
+    h_array = np.zeros((h + pad_h * 2), dtype = np.int32)
+    w_array = np.zeros((w + pad_w * 2), dtype = np.int32)
+    for poly in polys:
+        poly = np.round(poly, decimals = 0).astype(np.int32)
+        minx = np.min(poly[:, 0])
+        maxx = np.max(poly[:, 0])
+        w_array[minx + pad_w:maxx + pad_w] = 1
+        miny = np.min(poly[:, 1])
+        maxy = np.max(poly[:, 1])
+        h_array[miny + pad_h:maxy + pad_h] = 1
+    # ensure the cropped area not across a text
+    h_axis = np.where(h_array == 0)[0]
+    w_axis = np.where(w_array == 0)[0]
+    if len(h_axis) == 0 or len(w_axis) == 0:
+        return im, polys, tags, np.array(len(polys))
+    for i in range(max_tries):
+        xx = np.random.choice(w_axis, size = 2)
+        xmin = np.min(xx) - pad_w
+        xmax = np.max(xx) - pad_w
+        xmin = np.clip(xmin, 0, w - 1)
+        xmax = np.clip(xmax, 0, w - 1)
+        yy = np.random.choice(h_axis, size = 2)
+        ymin = np.min(yy) - pad_h
+        ymax = np.max(yy) - pad_h
+        ymin = np.clip(ymin, 0, h - 1)
+        ymax = np.clip(ymax, 0, h - 1)
+        # if xmax - xmin < FLAGS.min_crop_side_ratio*w or ymax - ymin < FLAGS.min_crop_side_ratio*h:
+        if xmax - xmin < 0.1 * w or ymax - ymin < 0.1 * h:
+            # area too small
+            continue
+        if polys.shape[0] != 0:
+            poly_axis_in_area = (polys[:, :, 0] >= xmin) & (polys[:, :, 0] <= xmax) \
+                                & (polys[:, :, 1] >= ymin) & (polys[:, :, 1] <= ymax)
+            selected_polys = np.where(np.sum(poly_axis_in_area, axis = 1) == 4)[0]
+        else:
+            selected_polys = []
+        if len(selected_polys) == 0:
+            # no text in this area
+            if crop_background:
+                return im[ymin:ymax + 1, xmin:xmax + 1, :], polys[selected_polys], tags[selected_polys], selected_polys
+            else:
+                continue
+        im = im[ymin:ymax + 1, xmin:xmax + 1, :]
+        polys = polys[selected_polys]
+        tags = tags[selected_polys]
+        polys[:, :, 0] -= xmin
+        polys[:, :, 1] -= ymin
+        return im, polys, tags, selected_polys
+
+    return im, polys, tags, np.array(range(len(polys)))
 
 
 def shrink_poly(poly, r):
@@ -513,6 +580,7 @@ def generate_rbox(im_size, polys, tags):
     geo_map = np.zeros((h, w, 5), dtype=np.float32)
     # mask used during traning, to ignore some hard areas
     training_mask = np.ones((h, w), dtype=np.uint8)
+    rectangles = []
     for poly_idx, poly_tag in enumerate(zip(polys, tags)):
         poly = poly_tag[0]
         tag = poly_tag[1]
@@ -609,7 +677,7 @@ def generate_rbox(im_size, polys, tags):
 
         rectange = rectangle_from_parallelogram(parallelogram)
         rectange, rotate_angle = sort_rectangle(rectange)
-
+        rectangles.append(rectange.flatten())
         p0_rect, p1_rect, p2_rect, p3_rect = rectange
         for y, x in xy_in_poly:
             point = np.array([x, y], dtype=np.float32)
@@ -623,7 +691,7 @@ def generate_rbox(im_size, polys, tags):
             geo_map[y, x, 3] = point_dist_to_line(p3_rect, p0_rect, point)
             # angle
             geo_map[y, x, 4] = rotate_angle
-    return score_map, geo_map, training_mask
+    return score_map, geo_map, training_mask, rectangles
 
 def get_project_matrix_and_width(text_polyses, text_tags, box_masks, target_height=8.0):
     project_matrixes = []
@@ -634,9 +702,10 @@ def get_project_matrix_and_width(text_polyses, text_tags, box_masks, target_heig
 
     for i in range(text_polyses.shape[0]):
         
+        """
         if text_tags[i] == True:
             continue
-
+        """
         x1, y1, x2, y2, x3, y3, x4, y4 = text_polyses[i] / 4
         # x1, y1, x2, y2, x3, y3, x4, y4 = text_polyses[i]
 
@@ -681,7 +750,8 @@ def get_project_matrix_and_width(text_polyses, text_tags, box_masks, target_heig
 # Change for FOTS training
 def generator(input_size=512, batch_size=32,
               background_ratio=0, # No need for crop background
-              random_scale=np.array([0.5, 1, 2.0, 3.0]),
+              # random_scale=np.array([0.8, 1, 2.0, 3.0]),
+              random_scale=np.array([0.8, 0.85, 0.9, 0.95, 1.0, 1.1, 1.2]),
               vis=False):
     image_list = np.array(get_images())
     print('{} training images in {}'.format(
@@ -722,9 +792,10 @@ def generator(input_size=512, batch_size=32,
                 #     continue
                 # random scale this image
                 # Start the data augmentation
+                # 3.20 start re-scale on both width and height
                 rd_scale = np.random.choice(random_scale)
                 im = cv2.resize(im, dsize=None, fx=rd_scale, fy=rd_scale)
-                text_polys *= rd_scale
+                text_polys *= rd_scale                
                 # print rd_scale
                 # random crop a area from image
                 if np.random.rand() < background_ratio: # Since the background_ratio is 0 so it won't dive in this branch
@@ -744,14 +815,24 @@ def generator(input_size=512, batch_size=32,
                     geo_map = np.zeros((input_size, input_size, geo_map_channels), dtype=np.float32)
                     training_mask = np.ones((input_size, input_size), dtype=np.uint8)
                 else:
-                    # Cancel the data augmentation 
-                    im, text_polys, text_tags, text_label = crop_area(im, text_polys, text_tags, text_label, crop_background=False)
+                    # Cancel the data augmentation
+                    # Third 640×640 random samples are cropped. Here it is little diffrent from paper 
+                    # im, text_polys, text_tags, text_label = crop_area(im, text_polys, text_tags, text_label, crop_background=False)
+                    im, text_polys, text_tags, selected_poly = crop_area(im, text_polys, text_tags, crop_background=False)
                     
+                    """
                     while [-1] in text_label:
                         text_label.remove([-1])
+                    """
 
                     if text_polys.shape[0] == 0 or len(text_label) == 0:
                         continue
+
+                    """
+                    if text_polys.shape[0] != len(text_label):
+                        print "text polys is not equal to text label, check crop op"
+                        continue
+                    """
                     h, w, _ = im.shape
 
                     # pad the image to the training input size or the longer side of image
@@ -770,10 +851,24 @@ def generator(input_size=512, batch_size=32,
                     text_polys[:, :, 0] *= resize_ratio_3_x
                     text_polys[:, :, 1] *= resize_ratio_3_y
                     new_h, new_w, _ = im.shape
-                    score_map, geo_map, training_mask = generate_rbox((new_h, new_w), text_polys, text_tags)
+                    # score_map, geo_map, training_mask = generate_rbox((new_h, new_w), text_polys, text_tags)
+                    score_map, geo_map, training_mask, rectangles = generate_rbox((new_h, new_w), text_polys, text_tags)
 
-                    text_polys = np.array(text_polys).reshape(-1, 8)
-                    boxes_mask = np.array([count] * text_polys.shape[0])
+                    # print rectangles.shape
+
+                    # text_polys = np.array(text_polys).reshape(-1, 8)
+                    # boxes_mask = np.array([count] * text_polys.shape[0])
+                    text_label = [text_label[i] for i in selected_poly]
+                    # rectangles = [rectangles[i] for i in selected_poly]
+                    mask = [not (word == [-1]) for word in text_label]
+                    text_label = list(compress(text_label, mask))
+                    rectangles = list(compress(rectangles, mask))
+
+                    assert len(text_label) == len(rectangles)
+                    if len(text_label) == 0:
+                        continue
+
+                    boxes_mask = np.array([count] * len(rectangles))
 
                     count += 1
 
@@ -783,7 +878,7 @@ def generator(input_size=512, batch_size=32,
                 geo_maps.append(geo_map[::4, ::4, :].astype(np.float32))
                 training_masks.append(training_mask[::4, ::4, np.newaxis].astype(np.float32))
 
-                text_polyses.append(text_polys)
+                text_polyses.append(rectangles)
                 boxes_masks.append(boxes_mask)
                 text_labels.extend(text_label)
                 text_tagses.append(text_tags)
@@ -802,6 +897,7 @@ def generator(input_size=512, batch_size=32,
                     boxes_masks = np.concatenate(boxes_masks)
                     text_tagses = np.concatenate(text_tagses)
                     transform_matrixes, box_widths, filter_box_masks, max_width = get_project_matrix_and_width(text_polyses, text_tagses, boxes_masks)
+                    # TODO limit the batch size of recognition 
                     text_labels_sparse = sparse_tuple_from(np.array(text_labels))
                     # print "images size: ", len(images)    
                     # print "text labels size: ", len(text_labels)
@@ -809,7 +905,7 @@ def generator(input_size=512, batch_size=32,
                     max_box_widths = max_width * np.ones(filter_box_masks.shape[0])
 
                     # yield images, image_fns, score_maps, geo_maps, training_masks
-                    yield images, image_fns, score_maps, geo_maps, training_masks, transform_matrixes, filter_box_masks, box_widths, text_labels_sparse, max_box_widths
+                    yield images, image_fns, score_maps, geo_maps, training_masks, transform_matrixes, filter_box_masks, box_widths, text_labels_sparse, max_box_widths, text_label, rectangles
                     images = []
                     image_fns = []
                     score_maps = []
@@ -856,7 +952,7 @@ if __name__ == '__main__':
         print ground_truth_to_word(label)
 
     img_copy = img.copy()
-    for i in range(data[-1].shape[0]):
+    for i in range(len(data[-1])):
          cv2.polylines(img_copy[:, :, :], [data[-1][i].astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
 
     cv2.imwrite("crop_img.jpg", img_copy)
