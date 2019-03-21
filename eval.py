@@ -11,7 +11,7 @@ import lanms
 # tf.app.flags.DEFINE_string('test_data_path', 'training_samples/', '')
 tf.app.flags.DEFINE_string('test_data_path', '/data2/data/15ICDAR/test/image/', '')
 tf.app.flags.DEFINE_string('gpu_list', '1', '')
-tf.app.flags.DEFINE_string('checkpoint_path', 'backup_checkpoints/', '')
+tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints/', '')
 tf.app.flags.DEFINE_string('output_dir', 'outputs/', '')
 tf.app.flags.DEFINE_bool('no_write_images', False, 'do not write images')
 
@@ -39,7 +39,8 @@ def get_images():
                     break
     print('Find {} images'.format(len(files)))
     return files
-
+"""
+# It seems do not need it
 def resize_image(im, max_side_len=2400, input_size=512):
     new_h, new_w, _ = im.shape
     max_h_w_i = np.max([new_h, new_w, input_size])
@@ -57,6 +58,7 @@ def resize_image(im, max_side_len=2400, input_size=512):
 
     return im, (resize_ratio_3_y, resize_ratio_3_x)
 """
+
 def resize_image(im, max_side_len=2400):
     '''
     resize image to a size multiple of 32 which is required by the network
@@ -88,7 +90,7 @@ def resize_image(im, max_side_len=2400):
 
     return im, (ratio_h, ratio_w)
 
-"""
+
 def detect(score_map, geo_map, timer, score_map_thresh=0.8, box_thresh=0.1, nms_thres=0.2):
     '''
     restore text boxes from score map and geo map
@@ -222,52 +224,53 @@ def main(argv=None):
                 im = cv2.imread(im_fn)[:, :, ::-1]
                 start_time = time.time()
                 im_resized, (ratio_h, ratio_w) = resize_image(im)
+                # im_resized_d, (ratio_h_d, ratio_w_d) = resize_image_detection(im)
 
                 timer = {'net': 0, 'restore': 0, 'nms': 0}
                 start = time.time()
                 score, geometry = sess.run([f_score, f_geometry], feed_dict={input_images: [im_resized]})
-                timer['net'] = time.time() - start
-
+                
                 boxes, timer = detect(score_map=score, geo_map=geometry, timer=timer)
-                print('{} : net {:.0f}ms, restore {:.0f}ms, nms {:.0f}ms'.format(
-                    im_fn, timer['net']*1000, timer['restore']*1000, timer['nms']*1000))
-
+                
                 """
                 if boxes is not None:
                     boxes = boxes[:, :8].reshape((-1, 4, 2))
                     boxes[:, :, 0] /= ratio_w
                     boxes[:, :, 1] /= ratio_h
                 """
-
-                duration = time.time() - start_time
-                print('[timing] {}'.format(duration))
-
                 # save to file
                 if boxes is not None and boxes.shape[0] != 0:
                     res_file = os.path.join(
                         FLAGS.output_dir,
-                        '{}.txt'.format(
+                        'res_' + '{}.txt'.format(
                             os.path.basename(im_fn).split('.')[0]))
 
-                    # input_roi_boxes = boxes.reshape(-1, 8)
-                    input_roi_boxes = boxes[:, :8]
+                    input_roi_boxes = boxes[:, :8].reshape(-1, 8)
+                    # input_roi_boxes = boxes[:, :8].reshape((-1, 4, 2))
+                    
+                    # input_roi_boxes = boxes.copy()
+                    # input_roi_boxes[:, :, 0] *= ratio_w
+                    # input_roi_boxes[:, :, 1] *= ratio_h
+                    # input_roi_boxes = input_roi_boxes.reshape((-1, 8))
                     boxes_masks = np.array([0] * input_roi_boxes.shape[0])
                     transform_matrixes, box_widths, max_width = get_project_matrix_and_width(input_roi_boxes)
                     max_box_widths = max_width * np.ones(boxes_masks.shape[0]) # seq_len
 
                     # Run end to end
                     recog_decode = sess.run(dense_decode, feed_dict={input_images: [im_resized], input_transform_matrix: transform_matrixes, input_box_mask: boxes_masks, input_box_widths: box_widths, input_box_nums: boxes_masks.shape[0], input_seq_len: max_box_widths})
+                    timer['net'] = time.time() - start
+                    
+                    # Preparing for draw boxes
+                    boxes = boxes[:, :8].reshape((-1, 4, 2))
+                    boxes[:, :, 0] /= ratio_w
+                    boxes[:, :, 1] /= ratio_h
+
                     # print "recognition result: "
                     # for pred in recog_decode:
                        # print ground_truth_to_word(pred)
                     if recog_decode.shape[0] != boxes.shape[0]:
                         print "detection and recognition result are not equal!"
                         exit(-1)
-                    
-                    # Preparing for draw boxes
-                    boxes = boxes[:, :8].reshape((-1, 4, 2))
-                    boxes[:, :, 0] /= ratio_w
-                    boxes[:, :, 1] /= ratio_h
 
                     with open(res_file, 'w') as f:
                         for i, box in enumerate(boxes):
@@ -281,10 +284,18 @@ def main(argv=None):
                             cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
                             im_txt = cv2.putText(im[:, :, ::-1], ground_truth_to_word(recog_decode[i]), (box[0, 0]-15, box[0, 1]), font, 0.5, (255, 255, 255), 1)
                 else:
+                    timer['net'] = time.time() - start
                     res_file = os.path.join(FLAGS.output_dir, 'res_' + '{}.txt'.format(os.path.basename(im_fn).split('.')[0]))
                     f = open(res_file, "w")
                     im_txt = None
                     f.close()
+
+                print('{} : net {:.0f}ms, restore {:.0f}ms, nms {:.0f}ms'.format(
+                    im_fn, timer['net']*1000, timer['restore']*1000, timer['nms']*1000))
+
+                duration = time.time() - start_time
+                print('[timing] {}'.format(duration))
+
                 if not FLAGS.no_write_images:
                     img_path = os.path.join(FLAGS.output_dir, os.path.basename(im_fn))
                     # cv2.imwrite(img_path, im[:, :, ::-1])
