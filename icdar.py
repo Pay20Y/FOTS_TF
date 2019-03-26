@@ -80,6 +80,7 @@ def sparse_tuple_from(sequences, dtype=np.int32):
 
     return indices, values, shape
 
+"""
 def load_annoataion(p):
     '''
     load annotation from the text file
@@ -107,8 +108,45 @@ def load_annoataion(p):
                 labels.append(label_to_array(label))
                 text_tags.append(False)
         return np.array(text_polys, dtype=np.float32), np.array(text_tags, dtype=np.bool), labels
-
-
+"""
+def load_annoataion(p):
+    '''
+    load annotation from the text file
+    :param p:
+    :return:
+    '''
+    # print p 
+    text_polys = []
+    text_tags = []
+    labels = []
+    if not os.path.exists(p):
+        return np.array(text_polys, dtype=np.float32)
+    with open(p, 'r') as f:
+        for line in f.readlines():
+            # strip BOM. \ufeff for python3,  \xef\xbb\bf for python2
+            # line = [i.strip('\ufeff').strip('\xef\xbb\xbf') for i in line]
+            line = line.replace('\xef\xbb\bf', '')
+            line = line.replace('\xe2\x80\x8d', '')
+            line = line.strip()
+            line = line.split(',')
+            if len(line) > 9:
+                label = line[8]
+                for i in range(len(line) - 9):
+                    label = label + "," + line[i+9]
+            else:
+                label = line[-1]
+            # label = line[-1]
+            temp_line = map(eval, line[:8])
+            x1, y1, x2, y2, x3, y3, x4, y4 = map(float, temp_line)
+            # x1, y1, x2, y2, x3, y3, x4, y4 = list(map(float, line[:8]))
+            text_polys.append([[x1, y1], [x2, y2], [x3, y3], [x4, y4]])
+            if label == '*' or label == '###' or label == '':
+                text_tags.append(True)
+                labels.append([-1])
+            else:
+                labels.append(label_to_array(label))
+                text_tags.append(False)
+        return np.array(text_polys, dtype=np.float32), np.array(text_tags, dtype=np.bool), labels
 def polygon_area(poly):
     '''
     compute area of a polygon
@@ -905,7 +943,7 @@ def generator(input_size=512, batch_size=32,
                     max_box_widths = max_width * np.ones(filter_box_masks.shape[0])
 
                     # yield images, image_fns, score_maps, geo_maps, training_masks
-                    yield images, image_fns, score_maps, geo_maps, training_masks, transform_matrixes, filter_box_masks, box_widths, text_labels_sparse, max_box_widths, text_label, rectangles
+                    yield images, image_fns, score_maps, geo_maps, training_masks, transform_matrixes, filter_box_masks, box_widths, text_labels_sparse, max_box_widths
                     images = []
                     image_fns = []
                     score_maps = []
@@ -950,9 +988,10 @@ if __name__ == '__main__':
     print "Text in the crop: "
     for label in data[-2]:
         print ground_truth_to_word(label)
-
+    """
     img_copy = img.copy()
     for i in range(len(data[-1])):
          cv2.polylines(img_copy[:, :, :], [data[-1][i].astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
 
     cv2.imwrite("crop_img.jpg", img_copy)
+    """

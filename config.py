@@ -1,4 +1,5 @@
-CHAR_VECTOR = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-~`<>'.:;^/|!?$%#@&*()[]{}_+=,\\\""
+# coding:utf-8
+CHAR_VECTOR = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZÉ-~`<>´'.:;^/|!?$%#@&*()[]{}_+=,\\\""
 NUM_CLASSES = len(CHAR_VECTOR) + 1
 PRETRAINED_MODEL_PATH = "nets/resnet_v1_50.ckpt"
 INPUT_IMAGE_PATH = "training_samples" # The root path of the training images
