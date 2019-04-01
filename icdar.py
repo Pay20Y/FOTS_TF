@@ -17,7 +17,8 @@ import tensorflow as tf
 from data_util import GeneratorEnqueuer
 import config
 
-tf.app.flags.DEFINE_string('training_data_path', '/data2/data/15ICDAR/ch4_training_images/', 'training dataset to use')
+# tf.app.flags.DEFINE_string('training_data_path', '/data2/data/15ICDAR/ch4_training_images/', 'training dataset to use')
+tf.app.flags.DEFINE_string('training_data_path', '/home/qz/data/ICDAR15/ch4_training_images/', 'training dataset to use')
 # tf.app.flags.DEFINE_string('training_data_path', 'training_samples/', '')
 tf.app.flags.DEFINE_integer('max_image_large_side', 1280,
                             'max image size of training')
@@ -731,12 +732,12 @@ def generate_rbox(im_size, polys, tags):
             geo_map[y, x, 4] = rotate_angle
     return score_map, geo_map, training_mask, rectangles
 
-def get_project_matrix_and_width(text_polyses, text_tags, box_masks, target_height=8.0):
+def get_project_matrix_and_width(text_polyses, text_tags, target_height=8.0):
     project_matrixes = []
     box_widths = []
-    filter_box_masks = []
+    # filter_box_masks = []
     # max_width = 0
-    max_width = 0
+    # max_width = 0
 
     for i in range(text_polyses.shape[0]):
         
@@ -762,28 +763,30 @@ def get_project_matrix_and_width(text_polyses, text_tags, box_masks, target_heig
         width_box = math.ceil(8 * box_w / box_h)
         width_box = int(min(width_box, 128)) # not to exceed feature map's width
         # width_box = int(min(width_box, 512)) # not to exceed feature map's width
-
+        """
         if width_box > max_width: 
             max_width = width_box 
-
+        """
         mapped_x2, mapped_y2 = (width_box, 0)
-        mapped_x3, mapped_y3 = (width_box, 8)
+        # mapped_x3, mapped_y3 = (width_box, 8)
 
-        src_pts = np.float32([(x1, y1), (x2, y2),(x3, y3), (x4, y4)])
-        dst_pts = np.float32([(mapped_x1, mapped_y1), (mapped_x2, mapped_y2), (mapped_x3, mapped_y3), (mapped_x4, mapped_y4)])
-
-        project_matrix = cv2.getPerspectiveTransform(dst_pts.astype(np.float32), src_pts.astype(np.float32))
-        project_matrix = project_matrix.flatten()[:8]
-
-        project_matrixes.append(project_matrix)
+        # src_pts = np.float32([(x1, y1), (x2, y2),(x3, y3), (x4, y4)])
+        # dst_pts = np.float32([(mapped_x1, mapped_y1), (mapped_x2, mapped_y2), (mapped_x3, mapped_y3), (mapped_x4, mapped_y4)])
+	src_pts = np.float32([(x1, y1), (x2, y2), (x4, y4)])
+	dst_pts = np.float32([(mapped_x1, mapped_y1), (mapped_x2, mapped_y2), (mapped_x4, mapped_y4)])
+        # project_matrix = cv2.getPerspectiveTransform(dst_pts.astype(np.float32), src_pts.astype(np.float32))
+        # project_matrix = project_matrix.flatten()[:8]
+	affine_matrix = cv2.getAffineTransform(dst_pts.astype(np.float32), src_pts.astype(np.float32))
+	affine_matrix = affine_matrix.flatten()
+        project_matrixes.append(affine_matrix)
         box_widths.append(width_box)
-        filter_box_masks.append(box_masks[i])
+        # filter_box_masks.append(box_masks[i])
 
     project_matrixes = np.array(project_matrixes)
     box_widths = np.array(box_widths)
-    filter_box_masks = np.array(filter_box_masks)
+    # filter_box_masks = np.array(filter_box_masks)
 
-    return project_matrixes, box_widths, filter_box_masks, max_width
+    return project_matrixes, box_widths
 
 # Change for FOTS training
 def generator(input_size=512, batch_size=32,
@@ -817,7 +820,8 @@ def generator(input_size=512, batch_size=32,
                 h, w, _ = im.shape
                 # txt_fn = im_fn.replace(os.path.basename(im_fn).split('.')[1], 'txt')
                 child_name = im_fn.replace(os.path.basename(im_fn).split('.')[1], 'txt').split('/')[-1]
-                txt_fn = "/data2/data/15ICDAR/ch4_training_localization_transcription_gt_rec/" + "gt_" + child_name
+                # txt_fn = "/data2/data/15ICDAR/ch4_training_localization_transcription_gt_rec/" + "gt_" + child_name
+                txt_fn = "/home/qz/data/ICDAR15/ch4_training_localization_transcription_gt_rec/" + "gt_" + child_name
                 # txt_fn = "training_samples/" + "gt_" + child_name
                 if not os.path.exists(txt_fn):
                     print('text file {} does not exists'.format(txt_fn))
@@ -932,18 +936,18 @@ def generator(input_size=512, batch_size=32,
                     """
                     text_polyses = np.concatenate(text_polyses)
                     # print "text_polyses: ", text_polyses
-                    boxes_masks = np.concatenate(boxes_masks)
+                    # boxes_masks = np.concatenate(boxes_masks)
                     text_tagses = np.concatenate(text_tagses)
-                    transform_matrixes, box_widths, filter_box_masks, max_width = get_project_matrix_and_width(text_polyses, text_tagses, boxes_masks)
+                    transform_matrixes, box_widths = get_project_matrix_and_width(text_polyses, text_tagses)
                     # TODO limit the batch size of recognition 
                     text_labels_sparse = sparse_tuple_from(np.array(text_labels))
                     # print "images size: ", len(images)    
                     # print "text labels size: ", len(text_labels)
                     # print "masks size: ", filter_box_masks.shape
-                    max_box_widths = max_width * np.ones(filter_box_masks.shape[0])
+                    # max_box_widths = max_width * np.ones(filter_box_masks.shape[0])
 
                     # yield images, image_fns, score_maps, geo_maps, training_masks
-                    yield images, image_fns, score_maps, geo_maps, training_masks, transform_matrixes, filter_box_masks, box_widths, text_labels_sparse, max_box_widths
+                    yield images, image_fns, score_maps, geo_maps, training_masks, transform_matrixes, boxes_masks, box_widths, text_labels_sparse,
                     images = []
                     image_fns = []
                     score_maps = []
@@ -964,7 +968,7 @@ def get_batch(num_workers, **kwargs):
     try:
         enqueuer = GeneratorEnqueuer(generator(**kwargs), use_multiprocessing=True)
         print('Generator use 10 batches for buffering, this may take a while, you can tune this yourself.')
-        enqueuer.start(max_queue_size=4, workers=num_workers)
+        enqueuer.start(max_queue_size=10, workers=num_workers)
         generator_output = None
         while True:
             while enqueuer.is_running():
