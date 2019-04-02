@@ -6,24 +6,31 @@ import os
 
 
 class Recognition(object):
-	def __init__(self, rnn_hidden_num=256, is_training=True):
+	def __init__(self, rnn_hidden_num=256, keepProb=0.8, weight_decay=1e-5, is_training=True):
 		self.rnn_hidden_num = rnn_hidden_num
 		self.batch_norm_params = {'decay': 0.997, 'epsilon': 1e-5, 'scale': True, 'is_training': is_training}
+		self.keepProb = keepProb
+		self.weight_decay = weight_decay
 		self.num_classes = config.NUM_CLASSES
 	
 	def cnn(self, rois):
-		with tf.variable_scope("recog/cnn"):
-			conv1 = slim.conv2d(rois, 64, 3, stride=1, padding='SAME', activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm, normalizer_params=self.batch_norm_params)
-			conv1 = slim.conv2d(conv1, 64, 3, stride=1, padding='SAME', activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm, normalizer_params=self.batch_norm_params)
-			pool1 = slim.max_pool2d(conv1, [2, 1], stride=[2, 1])
-			conv2 = slim.conv2d(pool1, 128, 3, stride=1, padding='SAME', activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm, normalizer_params=self.batch_norm_params)
-			conv2 = slim.conv2d(conv2, 128, 3, stride=1, padding='SAME', activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm, normalizer_params=self.batch_norm_params)
-			pool2 = slim.max_pool2d(conv2, [2, 1], stride=[2, 1])
-			conv3 = slim.conv2d(pool2, 256, 3, stride=1, padding='SAME', activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm, normalizer_params=self.batch_norm_params)
-			conv3 = slim.conv2d(conv3, 256, 3, stride=1, padding='SAME', activation_fn=tf.nn.relu, normalizer_fn=slim.batch_norm, normalizer_params=self.batch_norm_params)
-			pool3 = slim.max_pool2d(conv3, [2, 1], stride=[2, 1])
+		with tf.variable_scope('recog/cnn'):
+			with slim.arg_scope([slim.conv2d],
+                activation_fn=tf.nn.relu,
+                normalizer_fn=slim.batch_norm,
+                normalizer_params=self.batch_norm_params,
+                weights_regularizer=slim.l2_regularizer(self.weight_decay)):
+				conv1 = slim.conv2d(rois, 64, 3, stride=1, padding='SAME')
+				conv1 = slim.conv2d(conv1, 64, 3, stride=1, padding='SAME')
+				pool1 = slim.max_pool2d(conv1, kernel_size=[2,2], stride=[2,1], padding='SAME')
+				conv2 = slim.conv2d(pool1, 128, 3, stride=1, padding='SAME')
+				conv2 = slim.conv2d(conv2, 128, 3, stride=1, padding='SAME')
+				pool2 = slim.max_pool2d(conv2, kernel_size=[2,2], stride=[2,1], padding='SAME')
+				conv3 = slim.conv2d(pool2, 256, 3, stride=1, padding='SAME')
+				conv3 = slim.conv2d(conv3, 256, 3, stride=1, padding='SAME')
+				pool3 = slim.max_pool2d(conv3, kernel_size=[2,2], stride=[2,1], padding='SAME')
 
-			return pool3
+				return pool3
 
 	
 	"""
@@ -45,7 +52,9 @@ class Recognition(object):
 	def bilstm(self, input_feature, seq_len):
 		with tf.variable_scope("recog/rnn"):
 			lstm_fw_cell = rnn.LSTMCell(self.rnn_hidden_num)
+			lstm_fw_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_fw_cell, input_keep_prob=self.keepProb, output_keep_prob=self.keepProb)
 			lstm_bw_cell = rnn.LSTMCell(self.rnn_hidden_num)
+			lstm_bw_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_bw_cell, input_keep_prob=self.keepProb, output_keep_prob=self.keepProb)
 			# infer_output, _ = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, input_feature, seq_len, dtype=tf.float32)
 			# infer_output, _ = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, input_feature, sequence_length=seq_len, time_major=True, dtype=tf.float32)
 			infer_output, _ = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, input_feature, sequence_length=seq_len, dtype=tf.float32)
@@ -54,8 +63,8 @@ class Recognition(object):
 			return infer_output
 			# return stack_lstm_layer
 
-	def build_graph(self, rois, seq_len, nums):
-		# num_rois = rois.shape[0]
+	def build_graph(self, rois, seq_len):
+		num_rois = tf.shape(rois)[0]
 
 		cnn_feature = self.cnn(rois) # N * 1 * W * C
 		print cnn_feature
@@ -79,7 +88,8 @@ class Recognition(object):
 		logits = tf.matmul(logits, W) + b # (N * T) * Class
 
 		# logits = tf.reshape(logits, [num_rois, -1, self.num_classes])
-		logits = tf.reshape(logits, [nums, -1, self.num_classes])
+		# logits = tf.reshape(logits, [nums, -1, self.num_classes])
+		logits = tf.reshape(logits, [num_rois, -1, self.num_classes])
 		
 		logits = tf.transpose(logits, (1, 0, 2))
 
