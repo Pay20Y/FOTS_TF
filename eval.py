@@ -352,8 +352,16 @@ def main(argv=None):
                             f.write('{},{},{},{},{},{},{},{},{}\r\n'.format(
                                 box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1], recognition_result_best
                             ))
+                            # Draw bounding box
                             cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
-                            im_txt = cv2.putText(im[:, :, ::-1], recognition_result_best, (box[0, 0]-15, box[0, 1]), font, 0.5, (0, 0, 255), 1)
+                            # Draw recognition results area
+                            text_area = box.copy()
+                            text_area[2, 1] = text_area[1, 1]
+                            text_area[3, 1] = text_area[0, 1]
+                            text_area[0, 1] = text_area[0, 1] - 15
+                            text_area[1, 1] = text_area[1, 1] - 15
+                            cv2.fillPoly(im[:, :, ::-1], [text_area.astype(np.int32).reshape((-1, 1, 2))], color=(255, 255, 0))
+                            im_txt = cv2.putText(im[:, :, ::-1], recognition_result_best, (box[0, 0], box[0, 1]), font, 0.5, (0, 0, 255), 1)
                 else:
                     timer['net'] = time.time() - start
                     res_file = os.path.join(FLAGS.output_dir, 'res_' + '{}.txt'.format(os.path.basename(im_fn).split('.')[0]))
