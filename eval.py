@@ -7,6 +7,7 @@ import tensorflow as tf
 
 import locality_aware_nms as nms_locality
 import lanms
+import Levenshtein
 
 # tf.app.flags.DEFINE_string('test_data_path', 'training_samples/', '')
 tf.app.flags.DEFINE_string('test_data_path', '/data2/data/15ICDAR/test/image/', '')
@@ -14,6 +15,7 @@ tf.app.flags.DEFINE_string('gpu_list', '1', '')
 tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints/', '')
 tf.app.flags.DEFINE_string('output_dir', 'outputs/', '')
 tf.app.flags.DEFINE_bool('no_write_images', False, 'do not write images')
+tf.app.flags.DEFINE_bool('use_vacab', True, 'strong, normal or weak')
 
 from module import Backbone_branch, Recognition_branch, RoI_rotate
 from icdar import restore_rectangle, ground_truth_to_word
@@ -134,7 +136,7 @@ def detect(score_map, geo_map, timer, score_map_thresh=0.8, box_thresh=0.1, nms_
     boxes = boxes[boxes[:, 8] > box_thresh]
 
     return boxes, timer
-
+"""
 def get_project_matrix_and_width(text_polyses, target_height=8.0):
     project_matrixes = []
     box_widths = []
@@ -177,6 +179,51 @@ def get_project_matrix_and_width(text_polyses, target_height=8.0):
     box_widths = np.array(box_widths)
 
     return project_matrixes, box_widths, max_width
+"""
+def get_project_matrix_and_width(text_polyses, target_height=8.0):
+    project_matrixes = []
+    box_widths = []
+    filter_box_masks = []
+    # max_width = 0
+    # max_width = 0
+
+    for i in range(text_polyses.shape[0]):
+        x1, y1, x2, y2, x3, y3, x4, y4 = text_polyses[i] / 4
+
+        rotated_rect = cv2.minAreaRect(np.array([[x1, y1], [x2, y2], [x3, y3], [x4, y4]]))
+        box_w, box_h = rotated_rect[1][0], rotated_rect[1][1]
+
+        if box_w <= box_h:
+            box_w, box_h = box_h, box_w
+
+        mapped_x1, mapped_y1 = (0, 0)
+        mapped_x4, mapped_y4 = (0, 8)
+
+        width_box = math.ceil(8 * box_w / box_h)
+        width_box = int(min(width_box, 128)) # not to exceed feature map's width
+        # width_box = int(min(width_box, 512)) # not to exceed feature map's width
+        """
+        if width_box > max_width: 
+            max_width = width_box 
+        """
+        mapped_x2, mapped_y2 = (width_box, 0)
+        # mapped_x3, mapped_y3 = (width_box, 8)
+
+        src_pts = np.float32([(x1, y1), (x2, y2), (x4, y4)])
+        dst_pts = np.float32([(mapped_x1, mapped_y1), (mapped_x2, mapped_y2), (mapped_x4, mapped_y4)])
+        affine_matrix = cv2.getAffineTransform(dst_pts.astype(np.float32), src_pts.astype(np.float32))
+        affine_matrix = affine_matrix.flatten()
+
+        # project_matrix = cv2.getPerspectiveTransform(dst_pts.astype(np.float32), src_pts.astype(np.float32))
+        # project_matrix = project_matrix.flatten()[:8]
+
+        project_matrixes.append(affine_matrix)
+        box_widths.append(width_box)
+
+    project_matrixes = np.array(project_matrixes)
+    box_widths = np.array(box_widths)
+
+    return project_matrixes, box_widths
 
 def sort_poly(p):
     min_axis = np.argmin(np.sum(p, axis=1))
@@ -185,6 +232,17 @@ def sort_poly(p):
         return p
     else:
         return p[[0, 3, 2, 1]]
+
+def find_similar_word(input_str, word_set):
+    min_distance = 10000
+    best_word = input_str
+    for word in word_set:
+        dist = Levenshtein.distance(input_str, word)
+        if dist < min_distance:
+            min_distance = dist
+            best_word = word
+
+    return best_word
 
 def main(argv=None):
     import os
@@ -195,19 +253,29 @@ def main(argv=None):
         if e.errno != 17:
             raise
 
+    word_set = set()
+    if FLAGS.use_vacab:
+        with open("vocab.txt", "r") as f:
+            for line in f.readlines():
+                line = line.strip()
+                word_set.add(line)
+
+
     with tf.get_default_graph().as_default():
         input_images = tf.placeholder(tf.float32, shape=[None, None, None, 3], name='input_images')
-        input_transform_matrix = tf.placeholder(tf.float32, shape=[None, 8], name='input_transform_matrix')
-        input_box_mask = tf.placeholder(tf.int32, shape=[None], name='input_box_mask')
+        input_transform_matrix = tf.placeholder(tf.float32, shape=[None, 6], name='input_transform_matrix')
+        # input_box_mask = tf.placeholder(tf.int32, shape=[None], name='input_box_mask')
+        input_box_mask = []
+        input_box_mask.append(tf.placeholder(tf.int32, shape=[None], name='input_box_masks_0'))
         input_box_widths = tf.placeholder(tf.int32, shape=[None], name='input_box_widths')
-        input_box_nums = tf.placeholder(tf.int32, name='input_box_nums')
-        input_seq_len = tf.placeholder(tf.int32, shape=[None], name='input_seq_len')
-        
+        # input_box_nums = tf.placeholder(tf.int32, name='input_box_nums')
+        # input_seq_len = tf.placeholder(tf.int32, shape=[None], name='input_seq_len')
+        input_seq_len = input_box_widths[tf.argmax(input_box_widths, 0)] * tf.ones_like(input_box_widths)
         global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
 
         shared_feature, f_score, f_geometry = detect_part.model(input_images)
-        pad_rois = roi_rotate_part.roi_rotate_tensor(shared_feature, input_transform_matrix, input_box_mask, input_box_widths, input_box_nums)
-        recognition_logits = recognize_part.build_graph(pad_rois, input_seq_len, input_box_nums)
+        pad_rois = roi_rotate_part.roi_rotate_tensor(shared_feature, input_transform_matrix, input_box_mask, input_box_widths)
+        recognition_logits = recognize_part.build_graph(pad_rois, input_seq_len)
         _, dense_decode = recognize_part.decode(recognition_logits, input_seq_len)
 
         variable_averages = tf.train.ExponentialMovingAverage(0.997, global_step)
@@ -252,12 +320,13 @@ def main(argv=None):
                     # input_roi_boxes[:, :, 0] *= ratio_w
                     # input_roi_boxes[:, :, 1] *= ratio_h
                     # input_roi_boxes = input_roi_boxes.reshape((-1, 8))
-                    boxes_masks = np.array([0] * input_roi_boxes.shape[0])
-                    transform_matrixes, box_widths, max_width = get_project_matrix_and_width(input_roi_boxes)
-                    max_box_widths = max_width * np.ones(boxes_masks.shape[0]) # seq_len
+                    # boxes_masks = np.array([0] * input_roi_boxes.shape[0])
+                    boxes_masks = [0] * input_roi_boxes.shape[0]
+                    transform_matrixes, box_widths = get_project_matrix_and_width(input_roi_boxes)
+                    # max_box_widths = max_width * np.ones(boxes_masks.shape[0]) # seq_len
 
                     # Run end to end
-                    recog_decode = sess.run(dense_decode, feed_dict={input_images: [im_resized], input_transform_matrix: transform_matrixes, input_box_mask: boxes_masks, input_box_widths: box_widths, input_box_nums: boxes_masks.shape[0], input_seq_len: max_box_widths})
+                    recog_decode = sess.run(dense_decode, feed_dict={input_images: [im_resized], input_transform_matrix: transform_matrixes, input_box_mask[0]: boxes_masks, input_box_widths: box_widths})
                     timer['net'] = time.time() - start
                     
                     # Preparing for draw boxes
@@ -278,11 +347,13 @@ def main(argv=None):
                             box = sort_poly(box.astype(np.int32))
                             if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
                                 continue
+                            recognition_result = ground_truth_to_word(recog_decode[i])
+                            recognition_result_best = find_similar_word(recognition_result, word_set)
                             f.write('{},{},{},{},{},{},{},{},{}\r\n'.format(
-                                box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1], ground_truth_to_word(recog_decode[i])
+                                box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1], recognition_result_best
                             ))
                             cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
-                            im_txt = cv2.putText(im[:, :, ::-1], ground_truth_to_word(recog_decode[i]), (box[0, 0]-15, box[0, 1]), font, 0.5, (255, 255, 255), 1)
+                            im_txt = cv2.putText(im[:, :, ::-1], recognition_result_best, (box[0, 0]-15, box[0, 1]), font, 0.5, (0, 0, 255), 1)
                 else:
                     timer['net'] = time.time() - start
                     res_file = os.path.join(FLAGS.output_dir, 'res_' + '{}.txt'.format(os.path.basename(im_fn).split('.')[0]))
