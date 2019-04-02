@@ -5,5 +5,5 @@
 #### Code is still going on. If you find bugs or problems, please start an issue and let me know. Thanks!
 ## How to use
 #### I think tensorflow version >= 1.0 and python2 will work
-#### 1) Change the data path in icdar.py and eval.py
+#### 1) Change the data path in icdar.py and eval.py. Note line 824 in icdar.py should be changed for the path of annotation file
 #### 2) Run multigpu_train.py for training or eval.py for testing
