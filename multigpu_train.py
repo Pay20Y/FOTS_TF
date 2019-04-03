@@ -107,8 +107,8 @@ def main(argv=None):
     d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_box_widths)
     # total_loss = detect_part.loss(input_score_maps, f_score, input_geo_maps, f_geometry, input_training_masks)
     tf.summary.scalar('total_loss', model_loss)
-    # total_loss = tf.add_n([model_loss] + tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-    total_loss = model_loss
+    total_loss = tf.add_n([model_loss] + tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+    # total_loss = model_loss
     batch_norm_updates_op = tf.group(*tf.get_collection(tf.GraphKeys.UPDATE_OPS))
     grads = opt.compute_gradients(total_loss)
     apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
