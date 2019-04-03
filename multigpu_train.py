@@ -14,7 +14,7 @@ tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints/', '')
 tf.app.flags.DEFINE_boolean('restore', False, 'whether to resotre from checkpoint')
 tf.app.flags.DEFINE_integer('save_checkpoint_steps', 1000, '')
 tf.app.flags.DEFINE_integer('save_summary_steps', 100, '')
-tf.app.flags.DEFINE_string('pretrained_model_path', 'synth_pretrained_model/', '')
+tf.app.flags.DEFINE_string('pretrained_model_path', None, '')
 
 import icdar
 # import synth
@@ -56,7 +56,7 @@ def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, inpu
 
     return detection_loss, recognition_loss, detection_loss + lamda * recognition_loss
 """
-def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_box_widths, input_seq_len, lamda=0.01):
+def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len, lamda=0.01):
     detection_loss = detect_part.loss(input_score_maps, f_score, input_geo_maps, f_geometry, input_training_masks)
     recognition_loss = recognize_part.loss(recognition_logits, input_transcription, input_seq_len)
 
