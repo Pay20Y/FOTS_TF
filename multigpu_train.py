@@ -38,8 +38,8 @@ def build_graph(input_images, input_transform_matrix, input_box_mask, input_box_
     # return f_score, f_geometry
 """
 
-def build_graph(input_images, input_transform_matrix, input_box_masks, input_box_widths):
-    input_seq_len = input_box_widths[tf.argmax(input_box_widths, 0)] * tf.ones_like(input_box_widths)
+def build_graph(input_images, input_transform_matrix, input_box_masks, input_box_widths, input_seq_len):
+    
     shared_feature, f_score, f_geometry = detect_part.model(input_images)
     pad_rois = roi_rotate_part.roi_rotate_tensor(shared_feature, input_transform_matrix, input_box_masks, input_box_widths)
     recognition_logits = recognize_part.build_graph(pad_rois, input_seq_len)
@@ -56,9 +56,9 @@ def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, inpu
 
     return detection_loss, recognition_loss, detection_loss + lamda * recognition_loss
 """
-def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_box_widths, lamda=0.01):
+def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_box_widths, input_seq_len, lamda=0.01):
     detection_loss = detect_part.loss(input_score_maps, f_score, input_geo_maps, f_geometry, input_training_masks)
-    recognition_loss = recognize_part.loss(recognition_logits, input_transcription, input_box_widths)
+    recognition_loss = recognize_part.loss(recognition_logits, input_transcription, input_seq_len)
 
     tf.summary.scalar('detect_loss', detection_loss)
     tf.summary.scalar('recognize_loss', recognition_loss)
@@ -86,6 +86,7 @@ def main(argv=None):
     input_box_masks = []
     # input_box_mask = tf.placeholder(tf.int32, shape=[None], name='input_box_mask')
     input_box_widths = tf.placeholder(tf.int32, shape=[None], name='input_box_widths')
+    input_seq_len = input_box_widths[tf.argmax(input_box_widths, 0)] * tf.ones_like(input_box_widths)
     # input_box_nums = tf.placeholder(tf.int32, name='input_box_nums')
     # input_seq_len = tf.placeholder(tf.int32, shape=[None], name='input_seq_len')
 
@@ -93,7 +94,7 @@ def main(argv=None):
         input_box_masks.append(tf.placeholder(tf.int32, shape=[None], name='input_box_masks_' + str(i)))
 
     # f_score, f_geometry, recognition_logits, dense_decode = build_graph(input_images, input_transform_matrix, input_box_mask, input_box_widths, input_box_nums, input_seq_len)
-    f_score, f_geometry, recognition_logits, dense_decode = build_graph(input_images, input_transform_matrix, input_box_masks, input_box_widths)
+    f_score, f_geometry, recognition_logits, dense_decode = build_graph(input_images, input_transform_matrix, input_box_masks, input_box_widths, input_seq_len)
     # f_score, f_geometry = build_graph(input_images, input_transform_matrix, input_box_mask, input_box_widths, input_box_nums, input_seq_len)
 
     global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
@@ -104,7 +105,7 @@ def main(argv=None):
     # opt = tf.train.MomentumOptimizer(learning_rate, 0.9)
 
     # d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len)
-    d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_box_widths)
+    d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len)
     # total_loss = detect_part.loss(input_score_maps, f_score, input_geo_maps, f_geometry, input_training_masks)
     tf.summary.scalar('total_loss', model_loss)
     total_loss = tf.add_n([model_loss] + tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
