@@ -8,6 +8,7 @@ import tensorflow as tf
 import locality_aware_nms as nms_locality
 import lanms
 import Levenshtein
+from bktree import BKTree, levenshtein, dict_words
 
 # tf.app.flags.DEFINE_string('test_data_path', 'training_samples/', '')
 tf.app.flags.DEFINE_string('test_data_path', '/data2/data/15ICDAR/test/image/', '')
@@ -232,7 +233,7 @@ def sort_poly(p):
         return p
     else:
         return p[[0, 3, 2, 1]]
-
+"""
 def find_similar_word(input_str, word_set):
     min_distance = 10000
     best_word = input_str
@@ -243,6 +244,9 @@ def find_similar_word(input_str, word_set):
             best_word = word
 
     return best_word
+"""
+def bktree_search(bktree, pred_word, dist=5):
+    return bktree.query(pred_word, dist)
 
 def main(argv=None):
     import os
@@ -253,14 +257,9 @@ def main(argv=None):
         if e.errno != 17:
             raise
 
-    word_set = set()
-    if FLAGS.use_vacab:
-        with open("vocab.txt", "r") as f:
-            for line in f.readlines():
-                line = line.strip()
-                word_set.add(line)
-
-
+    if FLAGS.use_vacab and os.path.exists("./vocab.txt"):
+        bk_tree = BKTree(levenshtein, dict_words('./vocab.txt'))
+                
     with tf.get_default_graph().as_default():
         input_images = tf.placeholder(tf.float32, shape=[None, None, None, 3], name='input_images')
         input_transform_matrix = tf.placeholder(tf.float32, shape=[None, 6], name='input_transform_matrix')
@@ -348,9 +347,12 @@ def main(argv=None):
                             if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
                                 continue
                             recognition_result = ground_truth_to_word(recog_decode[i])
-                            recognition_result_best = find_similar_word(recognition_result, word_set)
+                            if FLAGS.use_vacab:
+                                fix_result = bktree_search(bk_tree, recognition_result)
+                                if len(fix_result) != 0:
+                                    recognition_result = fix_result[0][1]
                             f.write('{},{},{},{},{},{},{},{},{}\r\n'.format(
-                                box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1], recognition_result_best
+                                box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1], recognition_result
                             ))
                             # Draw bounding box
                             cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
@@ -361,7 +363,7 @@ def main(argv=None):
                             text_area[0, 1] = text_area[0, 1] - 15
                             text_area[1, 1] = text_area[1, 1] - 15
                             cv2.fillPoly(im[:, :, ::-1], [text_area.astype(np.int32).reshape((-1, 1, 2))], color=(255, 255, 0))
-                            im_txt = cv2.putText(im[:, :, ::-1], recognition_result_best, (box[0, 0], box[0, 1]), font, 0.5, (0, 0, 255), 1)
+                            im_txt = cv2.putText(im[:, :, ::-1], recognition_result, (box[0, 0], box[0, 1]), font, 0.5, (0, 0, 255), 1)
                 else:
                     timer['net'] = time.time() - start
                     res_file = os.path.join(FLAGS.output_dir, 'res_' + '{}.txt'.format(os.path.basename(im_fn).split('.')[0]))
