@@ -18,10 +18,10 @@ You should also change line 824 in icdar.py should be changed for the path of an
 ![image_2](demo_images/img_2.jpg)
 ![image_3](demo_images/img_3.jpg)
 ### Differences from paper
-Without OHEM
-Pretrained on Synth800k for 6 epochs not 10 epochs
-Fine-tuned on ICDAR15 only without ICDAR2017 MLT
-And it can only get F-score 41 on ICDAR2015 testset, more training tricks are needed
++ Without OHEM
++ Pretrained on Synth800k for 6 epochs not 10 epochs
++ Fine-tuned on ICDAR15 only without ICDAR2017 MLT
++ And it can only get F-score 41 on ICDAR2015 testset, more training tricks are needed
 ### Reference
 + [EAST](https://github.com/argman/EAST)
 + [FOTS.Pytorch](https://github.com/jiangxiluning/FOTS.PyTorch)
