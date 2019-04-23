@@ -4,10 +4,10 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 tf.app.flags.DEFINE_integer('input_size', 512, '')
-tf.app.flags.DEFINE_integer('batch_size_per_gpu', 8, '')
-tf.app.flags.DEFINE_integer('num_readers', 8, '')
+tf.app.flags.DEFINE_integer('batch_size_per_gpu', 12, '')
+tf.app.flags.DEFINE_integer('num_readers', 10, '')
 tf.app.flags.DEFINE_float('learning_rate', 0.0001, '')
-tf.app.flags.DEFINE_integer('max_steps', 100000, '')
+tf.app.flags.DEFINE_integer('max_steps', 100001, '')
 tf.app.flags.DEFINE_float('moving_average_decay', 0.997, '')
 tf.app.flags.DEFINE_string('gpu_list', '1', '')
 tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints/', '')
@@ -27,38 +27,19 @@ FLAGS = tf.app.flags.FLAGS
 detect_part = Backbone_branch.Backbone(is_training=True)
 roi_rotate_part = RoI_rotate.RoIRotate()
 recognize_part = Recognition_branch.Recognition(is_training=True) 
-"""
-def build_graph(input_images, input_transform_matrix, input_box_mask, input_box_widths, input_box_nums, input_seq_len):
-
-    shared_feature, f_score, f_geometry = detect_part.model(input_images)
-    pad_rois = roi_rotate_part.roi_rotate_tensor(shared_feature, input_transform_matrix, input_box_mask, input_box_widths, input_box_nums)
-    recognition_logits = recognize_part.build_graph(pad_rois, input_seq_len, input_box_nums)
-    _, dense_decode = recognize_part.decode(recognition_logits, input_seq_len)
-    return f_score, f_geometry, recognition_logits, dense_decode
-    # return f_score, f_geometry
-"""
 
 def build_graph(input_images, input_transform_matrix, input_box_masks, input_box_widths, input_seq_len):
     
     shared_feature, f_score, f_geometry = detect_part.model(input_images)
-    pad_rois = roi_rotate_part.roi_rotate_tensor(shared_feature, input_transform_matrix, input_box_masks, input_box_widths)
-    recognition_logits = recognize_part.build_graph(pad_rois, input_seq_len)
-    _, dense_decode = recognize_part.decode(recognition_logits, input_seq_len)
-    return f_score, f_geometry, recognition_logits, dense_decode
+    pad_rois = roi_rotate_part.roi_rotate_tensor_pad(shared_feature, input_transform_matrix, input_box_masks, input_box_widths)
+    recognition_logits = recognize_part.build_graph(pad_rois, input_box_widths)
+    # _, dense_decode = recognize_part.decode(recognition_logits, input_box_widths)
+    return f_score, f_geometry, recognition_logits
     # return f_score, f_geometry
-"""
-def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len, lamda=0.01):
-    detection_loss = detect_part.loss(input_score_maps, f_score, input_geo_maps, f_geometry, input_training_masks)
-    recognition_loss = recognize_part.loss(recognition_logits, input_transcription, input_seq_len)
 
-    tf.summary.scalar('detect_loss', detection_loss)
-    tf.summary.scalar('recognize_loss', recognition_loss)
-
-    return detection_loss, recognition_loss, detection_loss + lamda * recognition_loss
-"""
-def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len, lamda=0.01):
+def compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_box_widths, lamda=0.01):
     detection_loss = detect_part.loss(input_score_maps, f_score, input_geo_maps, f_geometry, input_training_masks)
-    recognition_loss = recognize_part.loss(recognition_logits, input_transcription, input_seq_len)
+    recognition_loss = recognize_part.loss(recognition_logits, input_transcription, input_box_widths)
 
     tf.summary.scalar('detect_loss', detection_loss)
     tf.summary.scalar('recognize_loss', recognition_loss)
@@ -83,6 +64,7 @@ def main(argv=None):
     input_transcription = tf.sparse_placeholder(tf.int32, name='input_transcription')
     
     input_transform_matrix = tf.placeholder(tf.float32, shape=[None, 6], name='input_transform_matrix')
+    input_transform_matrix = tf.stop_gradient(input_transform_matrix)
     input_box_masks = []
     # input_box_mask = tf.placeholder(tf.int32, shape=[None], name='input_box_mask')
     input_box_widths = tf.placeholder(tf.int32, shape=[None], name='input_box_widths')
@@ -94,7 +76,7 @@ def main(argv=None):
         input_box_masks.append(tf.placeholder(tf.int32, shape=[None], name='input_box_masks_' + str(i)))
 
     # f_score, f_geometry, recognition_logits, dense_decode = build_graph(input_images, input_transform_matrix, input_box_mask, input_box_widths, input_box_nums, input_seq_len)
-    f_score, f_geometry, recognition_logits, dense_decode = build_graph(input_images, input_transform_matrix, input_box_masks, input_box_widths, input_seq_len)
+    f_score, f_geometry, recognition_logits = build_graph(input_images, input_transform_matrix, input_box_masks, input_box_widths, input_seq_len)
     # f_score, f_geometry = build_graph(input_images, input_transform_matrix, input_box_mask, input_box_widths, input_box_nums, input_seq_len)
 
     global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
@@ -105,7 +87,8 @@ def main(argv=None):
     # opt = tf.train.MomentumOptimizer(learning_rate, 0.9)
 
     # d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len)
-    d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len)
+    # d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_seq_len)
+    d_loss, r_loss, model_loss = compute_loss(f_score, f_geometry, recognition_logits, input_score_maps, input_geo_maps, input_training_masks, input_transcription, input_box_widths)
     # total_loss = detect_part.loss(input_score_maps, f_score, input_geo_maps, f_geometry, input_training_masks)
     tf.summary.scalar('total_loss', model_loss)
     total_loss = tf.add_n([model_loss] + tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
@@ -123,15 +106,25 @@ def main(argv=None):
     with tf.control_dependencies([variables_averages_op, apply_gradient_op, batch_norm_updates_op]):
         train_op = tf.no_op(name='train_op')
 
-    saver = tf.train.Saver(tf.global_variables())
+    saver = tf.train.Saver(tf.global_variables(), max_to_keep=1)
     summary_writer = tf.summary.FileWriter(FLAGS.checkpoint_path, tf.get_default_graph())
 
     init = tf.global_variables_initializer()
 
     if FLAGS.pretrained_model_path is not None:
-        ckpt = tf.train.latest_checkpoint(FLAGS.pretrained_model_path)
-        variable_restore_op = slim.assign_from_checkpoint_fn(ckpt, slim.get_trainable_variables(), ignore_missing_vars=True)
-    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)) as sess:
+        if os.path.isdir(FLAGS.pretrained_model_path):
+            print "Restore pretrained model from other datasets"
+            ckpt = tf.train.latest_checkpoint(FLAGS.pretrained_model_path)
+            variable_restore_op = slim.assign_from_checkpoint_fn(ckpt, slim.get_trainable_variables(),
+                                                             ignore_missing_vars=True)
+        else: # is *.ckpt
+            print "Restore pretrained model from imagenet"
+            variable_restore_op = slim.assign_from_checkpoint_fn(FLAGS.pretrained_model_path, slim.get_trainable_variables(),
+                                                             ignore_missing_vars=True)
+        # ckpt = tf.train.latest_checkpoint(FLAGS.pretrained_model_path)
+        # variable_restore_op = slim.assign_from_checkpoint_fn(ckpt, slim.get_trainable_variables(), ignore_missing_vars=True)
+    # with tf.Session(config=tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)) as sess:
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         if FLAGS.restore:
             print('continue training from previous checkpoint')
             ckpt = tf.train.latest_checkpoint(FLAGS.checkpoint_path)

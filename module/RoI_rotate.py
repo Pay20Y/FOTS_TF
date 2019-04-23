@@ -22,54 +22,159 @@ class RoIRotate(object):
 			box_masks: list of tensor N'
 			box_widths: N'
 		"""
-		max_width = box_widths[tf.argmax(box_widths, 0, output_type=tf.int32)]
-		box_widths = tf.cast(box_widths, tf.float32)
-		tile_feature_maps = []
-		# crop_boxes = []
-		# crop_sizes = []
-		# box_inds = []
-		map_shape = tf.shape(feature_map)
-		map_shape = tf.cast(map_shape, tf.float32)
+		with tf.variable_scope("RoIrotate"): 
+			max_width = box_widths[tf.argmax(box_widths, 0, output_type=tf.int32)]
+			box_widths = tf.cast(box_widths, tf.float32)
+			tile_feature_maps = []
+			# crop_boxes = []
+			# crop_sizes = []
+			# box_inds = []
+			map_shape = tf.shape(feature_map)
+			map_shape = tf.cast(map_shape, tf.float32)
 
-		for i, mask in enumerate(box_masks): # box_masks is a list of num of rois in each feature map
-			_feature_map = feature_map[i]
-			# _crop_box = tf.constant([0, 0, 8/map_shape[0], box_widths[i]/map_shape[1]])
-			# _crop_size = tf.constant([8, tf.cast(box_widths[i], tf.int32)])
-			_feature_map = tf.expand_dims(_feature_map, axis=0)
-			box_nums = tf.shape(mask)[0]
-			_feature_map = tf.tile(_feature_map, [box_nums, 1, 1, 1])
-			# crop_boxes.append(_crop_box)
-			# crop_sizes.append(_crop_size)
-			tile_feature_maps.append(_feature_map)
-			# box_inds.append(i)
+			for i, mask in enumerate(box_masks): # box_masks is a list of num of rois in each feature map
+				_feature_map = feature_map[i]
+				# _crop_box = tf.constant([0, 0, 8/map_shape[0], box_widths[i]/map_shape[1]])
+				# _crop_size = tf.constant([8, tf.cast(box_widths[i], tf.int32)])
+				_feature_map = tf.expand_dims(_feature_map, axis=0)
+				box_nums = tf.shape(mask)[0]
+				_feature_map = tf.tile(_feature_map, [box_nums, 1, 1, 1])
+				# crop_boxes.append(_crop_box)
+				# crop_sizes.append(_crop_size)
+				tile_feature_maps.append(_feature_map)
+				# box_inds.append(i)
 
-		tile_feature_maps = tf.concat(tile_feature_maps, axis=0) # N' * H * W * C where N' = N * B
-		norm_box_widths = box_widths / map_shape[2]
-		ones = tf.ones_like(norm_box_widths)
-		norm_box_heights = ones * (8.0 / map_shape[1])
-		zeros = tf.zeros_like(norm_box_widths)
-		crop_boxes = tf.transpose(tf.stack([zeros, zeros, norm_box_heights, norm_box_widths]))
+			tile_feature_maps = tf.concat(tile_feature_maps, axis=0) # N' * H * W * C where N' = N * B
+			norm_box_widths = box_widths / map_shape[2]
+			ones = tf.ones_like(norm_box_widths)
+			norm_box_heights = ones * (8.0 / map_shape[1])
+			zeros = tf.zeros_like(norm_box_widths)
+			crop_boxes = tf.transpose(tf.stack([zeros, zeros, norm_box_heights, norm_box_widths]))
+			"""
+			box_height = ones * 8
+			box_height = tf.cast(box_height, tf.int32)
+			box_width = ones * max_width
+			box_width = tf.cast(box_width, tf.int32)
+			"""
+			crop_size = tf.transpose(tf.stack([8, max_width]))
+			# crop_boxes = tf.stack(crop_boxes, axis=0)
+			# crop_sizes = tf.stack(crop_sizes, axis=0)
+
+			trans_feature_map = transformer(tile_feature_maps, transform_matrixs)
+			
+			# box_inds = tf.concat(box_masks, axis=0)
+			box_inds = tf.range(tf.shape(trans_feature_map)[0])
+			rois = tf.image.crop_and_resize(trans_feature_map, crop_boxes, box_inds, crop_size)
+
+			pad_rois = tf.image.pad_to_bounding_box(rois, 0, 0, 8, max_width)
+
+			print "pad_rois: ", pad_rois
+
+			return pad_rois
+
+	def roi_rotate_tensor_pad(self, feature_map, transform_matrixs, box_masks, box_widths):
+		with tf.variable_scope("RoIrotate"): 
+			max_width = box_widths[tf.argmax(box_widths, 0, output_type=tf.int32)]
+			# box_widths = tf.cast(box_widths, tf.float32)
+			tile_feature_maps = []
+			# crop_boxes = []
+			# crop_sizes = []
+			# box_inds = []
+			map_shape = tf.shape(feature_map)
+			map_shape = tf.cast(map_shape, tf.float32)
+
+			for i, mask in enumerate(box_masks): # box_masks is a list of num of rois in each feature map
+				_feature_map = feature_map[i]
+				# _crop_box = tf.constant([0, 0, 8/map_shape[0], box_widths[i]/map_shape[1]])
+				# _crop_size = tf.constant([8, tf.cast(box_widths[i], tf.int32)])
+				_feature_map = tf.expand_dims(_feature_map, axis=0)
+				box_nums = tf.shape(mask)[0]
+				_feature_map = tf.tile(_feature_map, [box_nums, 1, 1, 1])
+				# crop_boxes.append(_crop_box)
+				# crop_sizes.append(_crop_size)
+				tile_feature_maps.append(_feature_map)
+				# box_inds.append(i)
+
+			tile_feature_maps = tf.concat(tile_feature_maps, axis=0) # N' * H * W * C where N' = N * B
+			trans_feature_map = transformer(tile_feature_maps, transform_matrixs)
+
+			box_nums = tf.shape(box_widths)[0]
+			pad_rois = tf.TensorArray(tf.float32, box_nums)
+			i = 0
+
+			def cond(pad_rois, i):
+				return i < box_nums
+			def body(pad_rois, i):
+				_affine_feature_map = trans_feature_map[i]
+				width_box = box_widths[i]
+				# _affine_feature_map = tf.expand_dims(_affine_feature_map, 0)
+				# roi = tf.image.crop_and_resize(after_transform, [[0, 0, 8/map_shape[0], width_box/map_shape[1]]], [0], [8, tf.cast(width_box, tf.int32)])
+				roi = tf.image.crop_to_bounding_box(_affine_feature_map, 0, 0, 8, width_box)
+				pad_roi = tf.image.pad_to_bounding_box(roi, 0, 0, 8, max_width)
+				pad_rois = pad_rois.write(i, pad_roi)
+				i += 1
+
+				return pad_rois, i
+			pad_rois, _ = tf.while_loop(cond, body, loop_vars=[pad_rois, i])
+			pad_rois = pad_rois.stack()
+
+			print "pad_rois shape: ", pad_rois
+
+			return pad_rois
+
+	def roi_rotate_tensor_while(self, feature_map, transform_matrixs, box_masks, box_widths, is_debug=False):
+		assert transform_matrixs.shape[-1] != 8
 		"""
-		box_height = ones * 8
-		box_height = tf.cast(box_height, tf.int32)
-		box_width = ones * max_width
-		box_width = tf.cast(box_width, tf.int32)
+		Input:
+			feature_map: N * H * W * C
+			transform_matrixs: N' * 8
+			box_masks: list of tensor N * ?
+			box_widths: N'
 		"""
-		crop_size = tf.transpose(tf.stack([8, max_width]))
-		# crop_boxes = tf.stack(crop_boxes, axis=0)
-		# crop_sizes = tf.stack(crop_sizes, axis=0)
+		with tf.variable_scope("RoIrotate"):
+			box_masks = tf.concat(box_masks, axis=0) 
+			box_nums = tf.shape(box_widths)[0]
+			pad_rois = tf.TensorArray(tf.float32, box_nums)
+			# after_transforms = []
+			max_width = box_widths[tf.arg_max(box_widths, 0, tf.int32)]
+			i = 0
+			
+			def cond(pad_rois, i):
+				return i < box_nums
 
-		trans_feature_map = transformer(tile_feature_maps, transform_matrixs)
-		
-		# box_inds = tf.concat(box_masks, axis=0)
-		box_inds = tf.range(tf.shape(trans_feature_map)[0])
-		rois = tf.image.crop_and_resize(trans_feature_map, crop_boxes, box_inds, crop_size)
+			def body(pad_rois, i):
+				index = box_masks[i]
+				matrix = transform_matrixs[i]
+				_feature_map = feature_map[index]
+				map_shape = tf.shape(_feature_map)
+				map_shape = tf.to_float(map_shape)
+				# _feature_map = feature_map[i]
+				print box_widths
+				width_box = box_widths[i]
+				width_box = tf.cast(width_box, tf.float32)
 
-		pad_rois = tf.image.pad_to_bounding_box(rois, 0, 0, 8, max_width)
+				# Project transform
+				after_transform = tf.contrib.image.transform(_feature_map, matrix, "BILINEAR")
+				# after_transforms.append(after_transform)
+				after_transform = tf.expand_dims(after_transform, 0)
+				# roi = tf.image.crop_and_resize(after_transform, [[0, 0, 8/720.0, width_box/1280.0]], [0], [8, width_box])
+			
+				# roi = tf.image.crop_and_resize(after_transform, [[0, 0, 8/(config.INPUT_IMAGE_SIZE / 4.0), width_box/(config.INPUT_IMAGE_SIZE / 4.0)]], [0], [8, width_box])
+				# There are some erros
+				# roi = tf.image.crop_and_resize(after_transform, [[0, 0, 8/(config.INPUT_SIZE / 4.0), width_box/(config.INPUT_SIZE / 4.0)]], [0], [8, tf.cast(width_box, tf.int32)])
+				roi = tf.image.crop_and_resize(after_transform, [[0, 0, 8/map_shape[0], width_box/map_shape[1]]], [0], [8, tf.cast(width_box, tf.int32)])
+				#  = tf.image.crop_and_resize(after_transform, [[0, 0, 8/config.INPUT_IMAGE_SIZE, width_box/config.INPUT_IMAGE_SIZE]], [0], [8, width_box])
+				# roi = tf.image.crop_and_resize(after_transform, [[0, 0, 8/128.0, width_box/128.0]], [0], [8, width_box])
+				pad_roi = tf.image.pad_to_bounding_box(roi, 0, 0, 8, max_width)
+				pad_rois = pad_rois.write(i, pad_roi)
+				i += 1
 
-		print "pad_rois: ", pad_rois
+				return pad_rois, i
 
-		return pad_rois
+			pad_rois, _ = tf.while_loop(cond, body, loop_vars=[pad_rois, i])
+			pad_rois = pad_rois.stack()
+			pad_rois = tf.squeeze(pad_rois, axis=1)
+			return pad_rois
 
 def dummy_input():
 
@@ -86,7 +191,7 @@ def dummy_input():
 	for i in range(2):
 		box_num = 0
 		img = cv2.imread(os.path.join(folder_path, "img_" + str(i+1) + ".jpg"))
-		gt_file = open(os.path.join(folder_path, "gt_img_" + str(i+1) + ".txt"), "rb")
+		gt_file = open(os.path.join(folder_path, "img_" + str(i+1) + ".txt"), "rb")
 		input_imgs.append(img)
 		fea_h.append(img.shape[0])
 		fea_w.append(img.shape[1])
@@ -156,7 +261,7 @@ def check_RoIRotate(RR):
 		input_box_masks.append(tf.placeholder(tf.int32, shape=[None]))
 
 	# pad_rois = RR.roi_rotate_tensor(input_feature_map, input_transform_matrix, input_box_masks, input_box_widths)
-	pad_rois = RR.roi_rotate_tensor(input_feature_map, input_transform_matrix, input_box_masks, input_box_widths)
+	pad_rois = RR.roi_rotate_tensor_pad(input_feature_map, input_transform_matrix, input_box_masks, input_box_widths)
 
 	data = dummy_input()
 	for i in range(6):

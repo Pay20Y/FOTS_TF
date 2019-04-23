@@ -22,13 +22,13 @@ class Recognition(object):
                 weights_regularizer=slim.l2_regularizer(self.weight_decay)):
 				conv1 = slim.conv2d(rois, 64, 3, stride=1, padding='SAME')
 				conv1 = slim.conv2d(conv1, 64, 3, stride=1, padding='SAME')
-				pool1 = slim.max_pool2d(conv1, kernel_size=[2,2], stride=[2,1], padding='SAME')
+				pool1 = slim.max_pool2d(conv1, kernel_size=[2,1], stride=[2,1], padding='SAME')
 				conv2 = slim.conv2d(pool1, 128, 3, stride=1, padding='SAME')
 				conv2 = slim.conv2d(conv2, 128, 3, stride=1, padding='SAME')
-				pool2 = slim.max_pool2d(conv2, kernel_size=[2,2], stride=[2,1], padding='SAME')
+				pool2 = slim.max_pool2d(conv2, kernel_size=[2,1], stride=[2,1], padding='SAME')
 				conv3 = slim.conv2d(pool2, 256, 3, stride=1, padding='SAME')
 				conv3 = slim.conv2d(conv3, 256, 3, stride=1, padding='SAME')
-				pool3 = slim.max_pool2d(conv3, kernel_size=[2,2], stride=[2,1], padding='SAME')
+				pool3 = slim.max_pool2d(conv3, kernel_size=[2,1], stride=[2,1], padding='SAME')
 
 				return pool3
 

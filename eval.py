@@ -11,11 +11,16 @@ import Levenshtein
 from bktree import BKTree, levenshtein, dict_words
 
 # tf.app.flags.DEFINE_string('test_data_path', 'training_samples/', '')
-tf.app.flags.DEFINE_string('test_data_path', '/data2/data/15ICDAR/test/image/', '')
+# tf.app.flags.DEFINE_string('test_data_path', '/data2/data/15ICDAR/test/image/', '')
+tf.app.flags.DEFINE_string('test_data_path', '/home/qz/data/ICDAR15/ch4_test_images/', '')
+# tf.app.flags.DEFINE_string('test_data_path', '/home/qz/data/ICDAR15/ch4_training_images/', '')
 tf.app.flags.DEFINE_string('gpu_list', '1', '')
 tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints/', '')
+# tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints_15only/', '')
+# tf.app.flags.DEFINE_string('checkpoint_path', 'synth_pretrained_model/', '')
 tf.app.flags.DEFINE_string('output_dir', 'outputs/', '')
-tf.app.flags.DEFINE_bool('no_write_images', False, 'do not write images')
+tf.app.flags.DEFINE_bool('no_write_images', True, 'do not write images')
+# tf.app.flags.DEFINE_bool('use_vacab', True, 'strong, normal or weak')
 tf.app.flags.DEFINE_bool('use_vacab', True, 'strong, normal or weak')
 
 from module import Backbone_branch, Recognition_branch, RoI_rotate
@@ -273,9 +278,9 @@ def main(argv=None):
         global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
 
         shared_feature, f_score, f_geometry = detect_part.model(input_images)
-        pad_rois = roi_rotate_part.roi_rotate_tensor(shared_feature, input_transform_matrix, input_box_mask, input_box_widths)
-        recognition_logits = recognize_part.build_graph(pad_rois, input_seq_len)
-        _, dense_decode = recognize_part.decode(recognition_logits, input_seq_len)
+        pad_rois = roi_rotate_part.roi_rotate_tensor_pad(shared_feature, input_transform_matrix, input_box_mask, input_box_widths)
+        recognition_logits = recognize_part.build_graph(pad_rois, input_box_widths)
+        _, dense_decode = recognize_part.decode(recognition_logits, input_box_widths)
 
         variable_averages = tf.train.ExponentialMovingAverage(0.997, global_step)
         saver = tf.train.Saver(variable_averages.variables_to_restore())
@@ -351,9 +356,15 @@ def main(argv=None):
                                 fix_result = bktree_search(bk_tree, recognition_result)
                                 if len(fix_result) != 0:
                                     recognition_result = fix_result[0][1]
+			     
                             f.write('{},{},{},{},{},{},{},{},{}\r\n'.format(
                                 box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1], recognition_result
                             ))
+			    """
+                            f.write('{},{},{},{},{},{},{},{}\r\n'.format(
+                                box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1]
+                            ))
+			    """ 
                             # Draw bounding box
                             cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
                             # Draw recognition results area
