@@ -6,7 +6,7 @@ This is an implementation of [FOTS: Fast Oriented Text Spotting with a Unified N
 + tensorflow
 + OpenCV
 ### Model
-Later
+Model pretrained on Synth800 for 6 epoch and finetuned on ICDAR15 [BaiduYunLink](https://pan.baidu.com/s/1BgkVHFaT91AptdwcTeJ2gg) keys:0aky
 ### Train
 >> python2 multigpu_train.py --gpu_list=gpu_id --training_data_path=/path/to/trainset/
 
