@@ -21,7 +21,7 @@ You should also change line 824 in icdar.py should be changed for the path of an
 + Without OHEM
 + Pretrained on Synth800k for 6 epochs not 10 epochs
 + Fine-tuned on ICDAR15 only without ICDAR2017 MLT
-+ And it can only get F-score 41 on ICDAR2015 testset, more training tricks are needed
++ And it can only get F-score 56 on ICDAR2015 testset, more training tricks are needed
 ### Reference
 + [EAST](https://github.com/argman/EAST)
 + [FOTS.Pytorch](https://github.com/jiangxiluning/FOTS.PyTorch)

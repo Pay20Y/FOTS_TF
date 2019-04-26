@@ -15,7 +15,7 @@ from bktree import BKTree, levenshtein, dict_words
 tf.app.flags.DEFINE_string('test_data_path', '/home/qz/data/ICDAR15/ch4_test_images/', '')
 # tf.app.flags.DEFINE_string('test_data_path', '/home/qz/data/ICDAR15/ch4_training_images/', '')
 tf.app.flags.DEFINE_string('gpu_list', '1', '')
-tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints/', '')
+tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints_pretrained_600k/', '')
 # tf.app.flags.DEFINE_string('checkpoint_path', 'checkpoints_15only/', '')
 # tf.app.flags.DEFINE_string('checkpoint_path', 'synth_pretrained_model/', '')
 tf.app.flags.DEFINE_string('output_dir', 'outputs/', '')
@@ -353,7 +353,7 @@ def main(argv=None):
                                 continue
                             recognition_result = ground_truth_to_word(recog_decode[i])
                             if FLAGS.use_vacab:
-                                fix_result = bktree_search(bk_tree, recognition_result)
+                                fix_result = bktree_search(bk_tree, recognition_result.upper())
                                 if len(fix_result) != 0:
                                     recognition_result = fix_result[0][1]
 			     
