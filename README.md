@@ -1,11 +1,13 @@
-## Fast Oriented Text Spotting with a Unified Networks
+# Fast Oriented Text Spotting with a Unified Networks
 ### Introduction
 This is an implementation of [FOTS: Fast Oriented Text Spotting with a Unified Network](https://arxiv.org/pdf/1801.01671.pdf)
 ### Install
 + Python3.5
 + tensorflow 1.12.0
 + OpenCV
->> pip install -r requirements.txt
+```
+pip install -r requirements.txt
+```
 ### Model
 SynthText 6-epochs pretrained model can be found [here](https://github.com/Pay20Y/FOTS_TF/releases/download/v2/SynthText_6_epochs.tar)
 ### Train
@@ -32,5 +34,5 @@ Coming soon
 - [ ] Decode with lexicon or language model
 ### Reference
 + [EAST](https://github.com/argman/EAST)
-+ [FOTS.Pytorch](https://github.com/jiangxiluning/FOTS.PyTorch)
++ [FOTS.Pytorch](https://github.com/jiangxiluning/FOTS.PyTorch)  
 Thanks for the authors!
