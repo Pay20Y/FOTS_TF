@@ -7,7 +7,7 @@ This is an implementation of [FOTS: Fast Oriented Text Spotting with a Unified N
 + OpenCV
 >> pip install -r requirements.txt
 ### Model
-SynthText 6-epochs pretrained model can be found here
+SynthText 6-epochs pretrained model can be found [here](https://github.com/Pay20Y/FOTS_TF/releases/download/v2/SynthText_6_epochs.tar)
 ### Train
 ```
 python3 main_train.py --gpu_list='0' --learning_rate=0.0001 --train_stage=2 --training_data_dir='/path/to/your/training images/' training_gt_data_dir='/path/to/your/training annotations'
@@ -23,7 +23,7 @@ Or you can implement your own data loader ([reference](data_provider/ICDAR_loade
 Note, for 'Don't care' text text tags should be True and transcription should be [-1]  
 And finetuning your own data on the SynthText pretrained model is suggested:  
 ```
-python3 main_train.py --gpu_list='0' --learning_rate=0.0001 --train_stage=2 --training_data_dir='/path/to/your/training images/' training_gt_data_dir='/path/to/your/training annotations' --pretrained_model_path='pretrained/model/path/'
+python3 main_train.py --gpu_list='0' --learning_rate=0.0001 --train_stage=2 --training_data_dir='/path/to/your/training images/' training_gt_data_dir='/path/to/your/training annotations' --pretrained_model_path='SynthText_6_epochs/'
 ```
 ### Examples and Experiments
 Coming soon
