@@ -1,4 +1,6 @@
 # Fast Oriented Text Spotting with a Unified Networkt
+### Update
+[08/17/2019] A new version is updated, please checkout the branch 'dev' ([link](https://github.com/Pay20Y/FOTS_TF/tree/dev)).
 ### Introduction
 This is an implementation of [FOTS: Fast Oriented Text Spotting with a Unified Network](https://arxiv.org/pdf/1801.01671.pdf)
 ### Install
