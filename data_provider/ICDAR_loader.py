@@ -13,11 +13,6 @@ class ICDARLoader(DataLoader):
 		text_polys = []
 		text_tags = []
 		labels = []
-		# since icdar17 gt file named like gt_img_XXX_2.txt
-		if gt_file.split(".")[0].split("_")[-1] == '2':
-			self.edition = '17'
-		else:
-			self.edition = '13'
 		if not os.path.exists(gt_file):
 			return np.array(text_polys, dtype=np.float32)
 		with open(gt_file, 'r', encoding="utf-8-sig") as f:
@@ -52,18 +47,5 @@ class ICDARLoader(DataLoader):
 					continue
 		text_polys = np.array(text_polys)
 		text_tags = np.array(text_tags)
-		labels = np.array(labels)
 
-		index = np.arange(0, text_polys.shape[0])
-		if self.shuffle:
-			np.random.shuffle(index)
-			text_polys = text_polys[index]
-			text_tags = text_tags[index]
-			labels = labels[index]
-
-		if text_polys.shape[0] > 32:
-			text_polys = text_polys[:32]
-			text_tags = text_tags[:32]
-			labels = labels[:32]
-		labels = labels.tolist()
 		return text_polys, text_tags, labels

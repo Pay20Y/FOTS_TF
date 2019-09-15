@@ -30,11 +30,6 @@ def generator(input_size=512, batch_size=12, random_scale=np.array([0.8, 0.85, 0
     # image_list = np.array(data_loader.get_images(FLAGS.training_data_dir_ic13, image_list))
     # image_list = np.array(data_loader.get_images(FLAGS.training_data_dir_ic15, image_list))
     image_list = np.array(data_loader.get_images(FLAGS.training_data_dir))
-    image_list_pick = []
-    for imfn in image_list:
-        if imfn.split(".")[0][-1] == '2':
-            image_list_pick.append(imfn)
-    image_list = np.array(image_list_pick)
     print('{} training images in {} '.format(image_list.shape[0], FLAGS.training_data_dir))
     index = np.arange(0, image_list.shape[0])
     while True:
@@ -73,7 +68,6 @@ def generator(input_size=512, batch_size=12, random_scale=np.array([0.8, 0.85, 0
                 text_polys, text_tags, text_labels = check_and_validate_polys(text_polys, text_tags, text_labels, (h, w))
 
                 ############################# Data Augmentation ##############################
-                """
                 # random scale this image
                 rd_scale = np.random.choice(random_scale)
                 im = cv2.resize(im, dsize=None, fx=rd_scale, fy=rd_scale)
@@ -88,7 +82,6 @@ def generator(input_size=512, batch_size=12, random_scale=np.array([0.8, 0.85, 0
                 # im, text_polys, text_tags, selected_poly = crop_area(im, text_polys, text_tags, crop_background=False)
                 im, text_polys, text_tags, selected_poly = crop_area_fix(im, text_polys, text_tags, crop_size=(600, 600))
                 # text_labels = [text_labels[i] for i in selected_poly]
-                """
                 if text_polys.shape[0] == 0 or len(text_labels) == 0:
                     continue
 
