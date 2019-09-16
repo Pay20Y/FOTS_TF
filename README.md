@@ -7,6 +7,7 @@ This is an implementation of [FOTS: Fast Oriented Text Spotting with a Unified N
 + OpenCV
 ```
 pip install -r requirements.txt
+git clone -b dev https://github.com/Pay20Y/FOTS_TF.git
 ```
 ### Model
 SynthText 6-epochs pretrained model can be found [here](https://github.com/Pay20Y/FOTS_TF/releases/download/v2/SynthText_6_epochs.tar)
