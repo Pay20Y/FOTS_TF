@@ -10,27 +10,13 @@ from data_provider.ICDAR_loader import ICDARLoader
 # from data_provider.SynthText_loader import SynthTextLoader
 from data_provider.data_enqueuer import GeneratorEnqueuer
 
-"""
-tf.app.flags.DEFINE_string('training_data_dir_ic13', '', 'training dataset to use')
-tf.app.flags.DEFINE_string('training_data_dir_ic17', '', 'ic17 training data dir')
-tf.app.flags.DEFINE_string('training_data_dir_ic15', '', 'ic15 training data dir')
-tf.app.flags.DEFINE_string('training_gt_dir_ic13', '', 'ic13 training dataset ground-truth to use')
-tf.app.flags.DEFINE_string('training_gt_dir_ic17', '', 'ic15 training dataset ground-truth to use')
-tf.app.flags.DEFINE_string('training_gt_dir_ic15', '', 'ic17 training dataset ground-truth to use')
-"""
 
-tf.app.flags.DEFINE_string('training_data_dir', default='/home/qz/data/ICDAR_13_15_17/images/', help='training images dir')
-tf.app.flags.DEFINE_string('training_gt_data_dir', default='/home/qz/data/ICDAR_13_15_17/annotations/', help='training gt dir')
-
-FLAGS = tf.app.flags.FLAGS 
-
-def generator(input_size=512, batch_size=12, random_scale=np.array([0.8, 0.85, 0.9, 0.95, 1.0, 1.1, 1.2]),):
+def generator(input_images_dir, input_gt_dir, input_size=512, batch_size=12, random_scale=np.array([0.8, 0.85, 0.9, 0.95, 1.0, 1.1, 1.2]),):
     # data_loader = SynthTextLoader()
-    data_loader = ICDARLoader(edition='17', shuffle=True)
-    # image_list = np.array(data_loader.get_images(FLAGS.training_data_dir_ic13, image_list))
-    # image_list = np.array(data_loader.get_images(FLAGS.training_data_dir_ic15, image_list))
-    image_list = np.array(data_loader.get_images(FLAGS.training_data_dir))
-    print('{} training images in {} '.format(image_list.shape[0], FLAGS.training_data_dir))
+    data_loader = ICDARLoader(edition='13', shuffle=True)
+    # image_list = np.array(data_loader.get_images(FLAGS.training_data_dir))
+    image_list = np.array(data_loader.get_images(input_images_dir))
+    # print('{} training images in {} '.format(image_list.shape[0], FLAGS.training_data_dir))
     index = np.arange(0, image_list.shape[0])
     while True:
         np.random.shuffle(index)
@@ -52,14 +38,16 @@ def generator(input_size=512, batch_size=12, random_scale=np.array([0.8, 0.85, 0
                 # print(im_fn)
                 # if im_fn.split(".")[0][-1] == '0' or im_fn.split(".")[0][-1] == '2':
                 #     continue
-                im = cv2.imread(os.path.join(FLAGS.training_data_dir, im_fn))
+                im = cv2.imread(os.path.join(input_images_dir, im_fn))
                 h, w, _ = im.shape
                 file_name = "gt_" + im_fn.replace(os.path.basename(im_fn).split('.')[1], 'txt').split('/')[-1]
                 # file_name = im_fn.replace(im_fn.split('.')[1], 'txt') # using for synthtext
-                txt_fn = os.path.join(FLAGS.training_gt_data_dir, file_name)
+                # txt_fn = os.path.join(FLAGS.training_gt_data_dir, file_name)
+                txt_fn = os.path.join(input_gt_dir, file_name)
                 if not os.path.exists(txt_fn):
                     print('text file {} does not exists'.format(txt_fn))
                     continue
+                print(txt_fn)
                 text_polys, text_tags, text_labels = data_loader.load_annotation(txt_fn) # Change for load text transiption
                 
                 if text_polys.shape[0] == 0:
@@ -78,10 +66,9 @@ def generator(input_size=512, batch_size=12, random_scale=np.array([0.8, 0.85, 0
                 im, text_polys = rotate_image(im, text_polys, angle)
 
                 # 600×600 random samples are cropped.
-                # im, text_polys, text_tags, text_label = crop_area(im, text_polys, text_tags, text_label, crop_background=False)
-                # im, text_polys, text_tags, selected_poly = crop_area(im, text_polys, text_tags, crop_background=False)
-                im, text_polys, text_tags, selected_poly = crop_area_fix(im, text_polys, text_tags, crop_size=(600, 600))
-                # text_labels = [text_labels[i] for i in selected_poly]
+                im, text_polys, text_tags, selected_poly = crop_area(im, text_polys, text_tags, crop_background=False)
+                # im, text_polys, text_tags, selected_poly = crop_area_fix(im, text_polys, text_tags, crop_size=(600, 600))
+                text_labels = [text_labels[i] for i in selected_poly]
                 if text_polys.shape[0] == 0 or len(text_labels) == 0:
                     continue
 

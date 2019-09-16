@@ -16,6 +16,8 @@ tf.app.flags.DEFINE_integer('save_checkpoint_steps', 1000, '')
 tf.app.flags.DEFINE_integer('save_summary_steps', 100, '')
 tf.app.flags.DEFINE_string('pretrained_model_path', None, '')
 tf.app.flags.DEFINE_integer('train_stage', 2, '0-train detection only; 1-train recognition only; 2-train end-to-end; 3-train end-to-end absolutely')
+tf.app.flags.DEFINE_string('training_data_dir', default='', help='training images dir')
+tf.app.flags.DEFINE_string('training_gt_data_dir', default='', help='training gt dir')
 
 from data_provider import data_generator
 from module import Backbone_branch, Recognition_branch, RoI_rotate
@@ -141,8 +143,7 @@ def main(argv=None):
             if FLAGS.pretrained_model_path is not None:
                 variable_restore_op(sess)
 
-
-        dg = data_generator.get_batch(num_workers=FLAGS.num_readers,
+        dg = data_generator.get_batch(input_images_dir=FLAGS.training_data_dir, input_gt_dir=FLAGS.training_gt_data_dir, num_workers=FLAGS.num_readers,
                                          input_size=FLAGS.input_size,
                                          batch_size=FLAGS.batch_size_per_gpu)
 
@@ -160,7 +161,6 @@ def main(argv=None):
             for i in range(FLAGS.batch_size_per_gpu):
                 inp_dict[input_box_masks[i]] = data[6][i]
 
-            print("text roi nums: ", data[5].shape[0])
 
             dl, rl, tl, _ = sess.run([d_loss, r_loss, total_loss, train_op], feed_dict=inp_dict)
             if np.isnan(tl):
